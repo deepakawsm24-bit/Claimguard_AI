@@ -3,73 +3,119 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(
-    page_title="ClaimGuard AI",
+    page_title="ClaimGuard AI Dashboard",
     page_icon="🏥",
     layout="wide"
 )
 
 st.title("🏥 ClaimGuard AI")
-st.subheader("Healthcare Claim Document Checking & Risk Review")
+st.subheader("Healthcare Claims Risk Dashboard")
+
 st.info(
-    "Demo project: This tool checks document availability "
-    "and flags claims for manual review. It does not approve or reject claims."
+    "Demo only: Synthetic claims are used for dashboard display. "
+    "Risk flags support manual review, not claim approval."
 )
 
-st.sidebar.header("Claim Details")
-claim_id = st.sidebar.text_input("Claim ID", value="CG001")
+# Demo data only
+data = [
+    {"Claim ID": "CG001", "Discharge Summary": True,  "Final Bill": False, "Investigation Reports": False},
+    {"Claim ID": "CG002", "Discharge Summary": True,  "Final Bill": True,  "Investigation Reports": False},
+    {"Claim ID": "CG003", "Discharge Summary": True,  "Final Bill": True,  "Investigation Reports": True},
+    {"Claim ID": "CG004", "Discharge Summary": False, "Final Bill": False, "Investigation Reports": True},
+    {"Claim ID": "CG005", "Discharge Summary": True,  "Final Bill": True,  "Investigation Reports": True},
+]
 
-st.sidebar.write("### Documents Received")
-discharge_summary = st.sidebar.checkbox("Discharge Summary")
-final_bill = st.sidebar.checkbox("Final Bill")
-investigation_reports = st.sidebar.checkbox("Investigation Reports")
+df = pd.DataFrame(data)
 
-if st.sidebar.button("Check Claim", type="primary"):
-    missing = []
+def review_claim(row):
+    missing = sum([
+        not row["Discharge Summary"],
+        not row["Final Bill"],
+        not row["Investigation Reports"]
+    ])
+    if missing >= 2:
+        return "HIGH"
+    elif missing == 1:
+        return "MEDIUM"
+    return "NO DOCUMENT FLAGS"
 
-    if not discharge_summary:
-        missing.append("Discharge Summary")
-    if not final_bill:
-        missing.append("Final Bill")
-    if not investigation_reports:
-        missing.append("Investigation Reports")
+df["Risk Level"] = df.apply(review_claim, axis=1)
 
-    st.header("Claim Review Result")
-    st.write("**Claim ID:**", claim_id)
+# Dashboard metrics
+total = len(df)
+high = int((df["Risk Level"] == "HIGH").sum())
+medium = int((df["Risk Level"] == "MEDIUM").sum())
+clear = int((df["Risk Level"] == "NO DOCUMENT FLAGS").sum())
 
-    if len(missing) >= 2:
-        risk = "HIGH"
-    elif len(missing) == 1:
-        risk = "MEDIUM"
-    else:
-        risk = "NO DOCUMENT FLAGS"
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total Claims", total)
+c2.metric("High Risk", high)
+c3.metric("Medium Risk", medium)
+c4.metric("No Document Flags", clear)
 
-    if risk == "HIGH":
+st.divider()
+
+left, right = st.columns(2)
+
+with left:
+    st.subheader("📊 Claims by Risk Level")
+    chart_data = df["Risk Level"].value_counts()
+    st.bar_chart(chart_data)
+
+with right:
+    st.subheader("🔎 Search Claim")
+    search_id = st.text_input("Enter Claim ID", placeholder="e.g. CG001")
+    if search_id:
+        result = df[df["Claim ID"].str.contains(search_id, case=False, na=False)]
+        if not result.empty:
+            st.dataframe(result, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No matching demo claim found.")
+
+st.divider()
+st.subheader("📋 All Demo Claims")
+
+risk_filter = st.selectbox(
+    "Filter by Risk Level",
+    ["ALL", "HIGH", "MEDIUM", "NO DOCUMENT FLAGS"]
+)
+
+view = df if risk_filter == "ALL" else df[df["Risk Level"] == risk_filter]
+st.dataframe(view, use_container_width=True, hide_index=True)
+
+st.caption(
+    "Demo records only. Do not enter real patient information. "
+    "Authorized staff must verify documents and make all final decisions."
+)
+
+st.subheader("🧾 Check a Claim")
+
+with st.form("claim_checker"):
+    claim_id = st.text_input("Claim ID", value="CG006")
+    discharge = st.checkbox("Discharge Summary received")
+    bill = st.checkbox("Final Bill received")
+    reports = st.checkbox("Investigation Reports received")
+    submitted = st.form_submit_button("Check Claim")
+
+if submitted:
+    missing_docs = []
+    if not discharge:
+        missing_docs.append("Discharge Summary")
+    if not bill:
+        missing_docs.append("Final Bill")
+    if not reports:
+        missing_docs.append("Investigation Reports")
+
+    if len(missing_docs) >= 2:
         st.error("Risk Level: HIGH")
-    elif risk == "MEDIUM":
+    elif len(missing_docs) == 1:
         st.warning("Risk Level: MEDIUM")
     else:
         st.success("Risk Level: NO DOCUMENT FLAGS")
 
-    if missing:
-        st.write("**Missing documents:**")
-        for document in missing:
-            st.write("- ", document)
-        st.warning("Recommended action: Manual verification required.")
+    st.write("Claim ID:", claim_id)
+    if missing_docs:
+        st.write("Missing documents:", ", ".join(missing_docs))
+        st.warning("Manual verification required.")
     else:
         st.success("All required documents are marked as received.")
-        st.write("Recommended action: Continue with the normal review process.")
-
-    st.caption(
-        "This is a rule-based demo. Final claim decisions must be made "
-        "by authorized healthcare staff."
-    )
-
-st.divider()
-st.subheader("How to Use")
-st.write(
-    "1. Enter a Claim ID in the sidebar. "
-    "2. Tick the documents received. "
-    "3. Click Check Claim to see the review result."
-)
-
-st.caption("Demo only — do not enter real patient details.")
