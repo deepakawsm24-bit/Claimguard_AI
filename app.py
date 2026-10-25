@@ -59,6 +59,56 @@ if uploaded_file is not None:
             df = pd.read_excel(uploaded_file)
 
         df.columns = df.columns.str.strip()
+        
+        # Data validation checks
+        st.subheader("🔎 Data Quality Validation")
+
+        # Check for blank Claim IDs
+        blank_ids = (
+            df["Claim ID"].isna()
+            | (df["Claim ID"].astype(str).str.strip() == "")
+        )
+
+        # Check for duplicate Claim IDs
+        duplicate_ids = (
+            df["Claim ID"].notna()
+            & df["Claim ID"].astype(str).str.strip().duplicated(keep=False)
+        )
+
+        # Check document values before converting them
+        valid_values = [
+            "true", "false", "yes", "no", "1", "0",
+            "received", "not received"
+        ]
+
+        invalid_counts = {}
+        for col in REQUIRED_DOCS:
+            values = df[col].dropna().astype(str).str.strip().str.lower()
+            invalid_counts[col] = int(
+                (~values.isin(valid_values)).sum()
+            )
+
+        if blank_ids.any():
+            st.error(f"Blank Claim IDs found: {int(blank_ids.sum())}")
+        else:
+            st.success("No blank Claim IDs found.")
+
+        if duplicate_ids.any():
+            st.warning(
+                f"Duplicate Claim IDs found: {int(duplicate_ids.sum())} rows"
+            )
+            st.dataframe(
+                df.loc[duplicate_ids, ["Claim ID"]],
+                use_container_width=True
+            )
+        else:
+            st.success("No duplicate Claim IDs found.")
+
+        for col, count in invalid_counts.items():
+            if count:
+                st.warning(f"{col}: {count} invalid value(s) found.")
+            else:
+                st.success(f"{col}: document values look valid.")
 
         required_columns = ["Claim ID"] + REQUIRED_DOCS
         missing_columns = [
