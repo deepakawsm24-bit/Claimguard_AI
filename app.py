@@ -122,7 +122,7 @@ if uploaded_file is not None:
             )
             st.stop()
          
-         def to_bool(value):
+            def to_bool(value):
             if isinstance(value, bool):
                 return value
             if pd.isna(value):
