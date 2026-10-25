@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(
-    page_title="ClaimGuard AI Dashboard",
+    page_title="ClaimGuard AI",
     page_icon="🏥",
     layout="wide"
 )
@@ -12,110 +12,131 @@ st.title("🏥 ClaimGuard AI")
 st.subheader("Healthcare Claims Risk Dashboard")
 
 st.info(
-    "Demo only: Synthetic claims are used for dashboard display. "
-    "Risk flags support manual review, not claim approval."
+    "Demo tool: Missing documents ko flag karta hai. "
+    "Final claim decisions authorized staff karein."
 )
 
-# Demo data only
-data = [
-    {"Claim ID": "CG001", "Discharge Summary": True,  "Final Bill": False, "Investigation Reports": False},
-    {"Claim ID": "CG002", "Discharge Summary": True,  "Final Bill": True,  "Investigation Reports": False},
-    {"Claim ID": "CG003", "Discharge Summary": True,  "Final Bill": True,  "Investigation Reports": True},
-    {"Claim ID": "CG004", "Discharge Summary": False, "Final Bill": False, "Investigation Reports": True},
-    {"Claim ID": "CG005", "Discharge Summary": True,  "Final Bill": True,  "Investigation Reports": True},
+REQUIRED_DOCS = [
+    "Discharge Summary",
+    "Final Bill",
+    "Investigation Reports"
 ]
 
-df = pd.DataFrame(data)
+def assess_risk(row):
+    missing = [
+        doc for doc in REQUIRED_DOCS
+        if not bool(row[doc])
+    ]
 
-def review_claim(row):
-    missing = sum([
-        not row["Discharge Summary"],
-        not row["Final Bill"],
-        not row["Investigation Reports"]
-    ])
-    if missing >= 2:
-        return "HIGH"
-    elif missing == 1:
-        return "MEDIUM"
-    return "NO DOCUMENT FLAGS"
+    if len(missing) >= 2:
+        risk = "HIGH"
+    elif len(missing) == 1:
+        risk = "MEDIUM"
+    else:
+        risk = "NO DOCUMENT FLAGS"
 
-df["Risk Level"] = df.apply(review_claim, axis=1)
+    return pd.Series([risk, ", ".join(missing) or "None"])
 
-# Dashboard metrics
-total = len(df)
-high = int((df["Risk Level"] == "HIGH").sum())
-medium = int((df["Risk Level"] == "MEDIUM").sum())
-clear = int((df["Risk Level"] == "NO DOCUMENT FLAGS").sum())
+st.header("📂 Upload Claims File")
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Total Claims", total)
-c2.metric("High Risk", high)
-c3.metric("Medium Risk", medium)
-c4.metric("No Document Flags", clear)
+st.write(
+    "CSV ya Excel file upload karo. File mein ye columns hone chahiye:"
+)
+st.code(
+    "Claim ID, Discharge Summary, Final Bill, Investigation Reports"
+)
 
-st.divider()
+uploaded_file = st.file_uploader(
+    "Upload CSV or Excel file",
+    type=["csv", "xlsx"]
+)
 
-left, right = st.columns(2)
-
-with left:
-    st.subheader("📊 Claims by Risk Level")
-    chart_data = df["Risk Level"].value_counts()
-    st.bar_chart(chart_data)
-
-with right:
-    st.subheader("🔎 Search Claim")
-    search_id = st.text_input("Enter Claim ID", placeholder="e.g. CG001")
-    if search_id:
-        result = df[df["Claim ID"].str.contains(search_id, case=False, na=False)]
-        if not result.empty:
-            st.dataframe(result, use_container_width=True, hide_index=True)
+if uploaded_file is not None:
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
         else:
-            st.warning("No matching demo claim found.")
+            df = pd.read_excel(uploaded_file)
 
-st.divider()
-st.subheader("📋 All Demo Claims")
+        df.columns = df.columns.str.strip()
 
-risk_filter = st.selectbox(
-    "Filter by Risk Level",
-    ["ALL", "HIGH", "MEDIUM", "NO DOCUMENT FLAGS"]
-)
+        required_columns = ["Claim ID"] + REQUIRED_DOCS
+        missing_columns = [
+            col for col in required_columns
+            if col not in df.columns
+        ]
 
-view = df if risk_filter == "ALL" else df[df["Risk Level"] == risk_filter]
-st.dataframe(view, use_container_width=True, hide_index=True)
+        if missing_columns:
+            st.error(
+                "Missing columns: " + ", ".join(missing_columns)
+            )
+            st.stop()
 
-st.caption(
-    "Demo records only. Do not enter real patient information. "
-    "Authorized staff must verify documents and make all final decisions."
-)
+        def to_bool(value):
+            if isinstance(value, bool):
+                return value
+            if pd.isna(value):
+                return False
+            return str(value).strip().lower() in [
+                "true", "yes", "1", "received"
+            ]
 
-st.subheader("🧾 Check a Claim")
+        for col in REQUIRED_DOCS:
+            df[col] = df[col].apply(to_bool)
 
-with st.form("claim_checker"):
-    claim_id = st.text_input("Claim ID", value="CG006")
-    discharge = st.checkbox("Discharge Summary received")
-    bill = st.checkbox("Final Bill received")
-    reports = st.checkbox("Investigation Reports received")
-    submitted = st.form_submit_button("Check Claim")
+        results = df.copy()
+        results[["Risk Level", "Missing Documents"]] = (
+            results.apply(assess_risk, axis=1)
+        )
 
-if submitted:
-    missing_docs = []
-    if not discharge:
-        missing_docs.append("Discharge Summary")
-    if not bill:
-        missing_docs.append("Final Bill")
-    if not reports:
-        missing_docs.append("Investigation Reports")
+        total = len(results)
+        high = int((results["Risk Level"] == "HIGH").sum())
+        medium = int((results["Risk Level"] == "MEDIUM").sum())
+        clear = int(
+            (results["Risk Level"] == "NO DOCUMENT FLAGS").sum()
+        )
 
-    if len(missing_docs) >= 2:
-        st.error("Risk Level: HIGH")
-    elif len(missing_docs) == 1:
-        st.warning("Risk Level: MEDIUM")
-    else:
-        st.success("Risk Level: NO DOCUMENT FLAGS")
+        st.header("📊 Claims Summary")
 
-    st.write("Claim ID:", claim_id)
-    if missing_docs:
-        st.write("Missing documents:", ", ".join(missing_docs))
-        st.warning("Manual verification required.")
-    else:
-        st.success("All required documents are marked as received.")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Claims", total)
+        c2.metric("High Risk", high)
+        c3.metric("Medium Risk", medium)
+        c4.metric("No Document Flags", clear)
+
+        st.subheader("Claims by Risk Level")
+        st.bar_chart(results["Risk Level"].value_counts())
+
+        st.subheader("📋 Claim Review Results")
+
+        risk_filter = st.selectbox(
+            "Filter claims",
+            ["ALL", "HIGH", "MEDIUM", "NO DOCUMENT FLAGS"]
+        )
+
+        if risk_filter == "ALL":
+            view = results
+        else:
+            view = results[
+                results["Risk Level"] == risk_filter
+            ]
+
+        st.dataframe(view, use_container_width=True)
+
+        csv_data = results.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            "⬇️ Download Review Results (CSV)",
+            data=csv_data,
+            file_name="claim_review_results.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"File could not be processed: {e}")
+
+else:
+    st.caption(
+        "Upload a test file to see the dashboard. "
+        "Use synthetic data only; do not upload real patient records."
+    )
