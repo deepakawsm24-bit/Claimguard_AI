@@ -121,24 +121,24 @@ if uploaded_file is not None:
                 "Missing columns: " + ", ".join(missing_columns)
             )
             st.stop()
+         
+         def to_bool(value):
+            if isinstance(value, bool):
+                return value
+            if pd.isna(value):
+                return None
+
+            text_value = str(value).strip().lower()
+
+            if text_value in ["true", "yes", "1", "received"]:
+                return True
+            if text_value in ["false", "no", "0", "not received"]:
+                return False
+
+            return None
 
      
-def to_bool(value):
-    if isinstance(value, bool):
-        return value
 
-    if pd.isna(value):
-        return None
-
-    text_value = str(value).strip().lower()
-
-    if text_value in ["true", "yes", "1", "received"]:
-        return True
-
-    if text_value in ["false", "no", "0", "not received"]:
-        return False
-
-    return None
 
 
         for col in REQUIRED_DOCS:
