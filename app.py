@@ -12,7 +12,9 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+)
 
 
 # ---------------------------------------------------------------------
@@ -156,14 +158,7 @@ def make_pdf(data, document_stats, metrics, source_name):
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F6FA")]),
         ("PADDING", (0, 0), (-1, -1), 6),
     ]))
-    story.extend([
-    PageBreak(),
-    Paragraph("3. Claim Review Details", styles["Heading2"]),
-    Spacer(1, 3 * mm),
-    rt,
-    Spacer(1, 6 * mm),
-    Paragraph("4. Important Notes", styles["Heading2"]),
-    ])
+    story.extend([t, Spacer(1, 6 * mm), Paragraph("2. Document Availability", styles["Heading2"])])
 
     doc_rows = [["Document", "Received", "Missing", "Valid values", "Missing rate (%)"]]
     for item in document_stats:
@@ -180,7 +175,10 @@ def make_pdf(data, document_stats, metrics, source_name):
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F6FA")]),
         ("PADDING", (0, 0), (-1, -1), 6),
     ]))
-    story.extend([dt, Spacer(1, 6 * mm), Paragraph("3. Claim Review Details", styles["Heading2"])])
+    story.extend([dt, Spacer(1, 6 * mm)])
+
+    # Start the claim-level table on a fresh page for a cleaner report layout.
+    story.extend([PageBreak(), Paragraph("3. Claim Review Details", styles["Heading2"])])
 
     cols = ["Claim ID", "Risk Level", "Data Status", "Missing Documents"]
     rows = [[Paragraph(c, styles["CGCell"]) for c in cols]]
@@ -191,28 +189,25 @@ def make_pdf(data, document_stats, metrics, source_name):
             Paragraph(html.escape(str(row.get("Data Status", ""))), styles["CGCell"]),
             Paragraph(html.escape(str(row.get("Missing Documents", ""))), styles["CGCell"]),
         ])
-   
+
     rt = Table(
         rows,
         colWidths=[35 * mm, 38 * mm, 43 * mm, 105 * mm],
         repeatRows=1,
         splitByRow=1,
     )
-
     rt.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#142B4A")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CFD8E3")),
+        ("GRID", (0, 0), (-1, -1), .3, colors.HexColor("#CFD8E3")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
-         [colors.white, colors.HexColor("#F2F6FA")]),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F6FA")]),
         ("LEFTPADDING", (0, 0), (-1, -1), 5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 5),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
-
     story.extend([rt, Spacer(1, 6 * mm), Paragraph("4. Important Notes", styles["Heading2"])])
     story.append(Paragraph(
         "This is a rule-based demonstration. Risk levels flag missing documents for manual review; "
