@@ -184,15 +184,28 @@ def make_pdf(data, document_stats, metrics, source_name):
             Paragraph(html.escape(str(row.get("Data Status", ""))), styles["CGCell"]),
             Paragraph(html.escape(str(row.get("Missing Documents", ""))), styles["CGCell"]),
         ])
-    rt = Table(rows, colWidths=[35 * mm, 38 * mm, 43 * mm, 105 * mm], repeatRows=1)
+   
+    rt = Table(
+        rows,
+        colWidths=[35 * mm, 38 * mm, 43 * mm, 105 * mm],
+        repeatRows=1,
+        splitByRow=1,
+    )
+
     rt.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#142B4A")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("GRID", (0, 0), (-1, -1), .3, colors.HexColor("#CFD8E3")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CFD8E3")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F6FA")]),
-        ("PADDING", (0, 0), (-1, -1), 4),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+         [colors.white, colors.HexColor("#F2F6FA")]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
+
     story.extend([rt, Spacer(1, 6 * mm), Paragraph("4. Important Notes", styles["Heading2"])])
     story.append(Paragraph(
         "This is a rule-based demonstration. Risk levels flag missing documents for manual review; "
