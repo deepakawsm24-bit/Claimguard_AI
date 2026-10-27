@@ -156,14 +156,14 @@ def make_pdf(data, document_stats, metrics, source_name):
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F6FA")]),
         ("PADDING", (0, 0), (-1, -1), 6),
     ]))
-  story.extend([
+    story.extend([
     PageBreak(),
     Paragraph("3. Claim Review Details", styles["Heading2"]),
     Spacer(1, 3 * mm),
     rt,
     Spacer(1, 6 * mm),
     Paragraph("4. Important Notes", styles["Heading2"]),
-])
+    ])
 
     doc_rows = [["Document", "Received", "Missing", "Valid values", "Missing rate (%)"]]
     for item in document_stats:
