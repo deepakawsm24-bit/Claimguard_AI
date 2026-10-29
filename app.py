@@ -34,6 +34,98 @@ FALSE_VALUES = {"false", "no", "0", "not received", "missing", "not available", 
 DATE_CANDIDATES = ["Claim Date", "Date", "Admission Date", "Discharge Date", "Submission Date", "Created At"]
 AMOUNT_CANDIDATES = ["Claim Amount", "Bill Amount", "Total Amount", "Amount"]
 
+
+# ---------------------------------------------------------------------
+# ClaimGuard AI | Explainable claim consistency checks
+# Rule-based assistance only; findings require human review.
+# ---------------------------------------------------------------------
+def run_claim_consistency_checks(row):
+    findings = []
+
+    # 1. Check required document availability
+    for doc in REQUIRED_DOCS:
+        if doc not in row.index:
+            findings.append({
+                "Check": "Document column missing",
+                "Finding": f"Required column '{doc}' is not present.",
+                "Severity": "HIGH",
+            })
+            continue
+
+        value = row[doc]
+
+        if pd.isna(value):
+            missing = True
+        else:
+            text = str(value).strip().lower()
+            missing = text in FALSE_VALUES or text in {
+                "", "nan", "none", "null", "n/a", "na"
+            }
+
+        if missing:
+            findings.append({
+                "Check": "Document availability",
+                "Finding": f"{doc} is missing or marked unavailable.",
+                "Severity": "REVIEW",
+            })
+
+    # 2. Compare amount columns only when multiple are supplied
+    available_amounts = {}
+
+    for col in AMOUNT_CANDIDATES:
+        if col in row.index and pd.notna(row[col]):
+            value = pd.to_numeric(row[col], errors="coerce")
+            if pd.notna(value):
+                available_amounts[col] = float(value)
+
+    if len(available_amounts) >= 2:
+        values = list(available_amounts.values())
+
+        if max(values) - min(values) > 1.0:
+            details = ", ".join(
+                f"{name}: {value:,.2f}"
+                for name, value in available_amounts.items()
+            )
+            findings.append({
+                "Check": "Amount consistency",
+                "Finding": (
+                    "Amount fields differ; verify the source documents. "
+                    + details
+                ),
+                "Severity": "REVIEW",
+            })
+
+    # 3. Check admission and discharge date order
+    if "Admission Date" in row.index and "Discharge Date" in row.index:
+        admission = pd.to_datetime(
+            row["Admission Date"], errors="coerce"
+        )
+        discharge = pd.to_datetime(
+            row["Discharge Date"], errors="coerce"
+        )
+
+        if pd.notna(admission) and pd.notna(discharge):
+            if discharge < admission:
+                findings.append({
+                    "Check": "Date consistency",
+                    "Finding": (
+                        "Discharge date is earlier than admission date."
+                    ),
+                    "Severity": "REVIEW",
+                })
+
+    if not findings:
+        findings.append({
+            "Check": "Basic consistency",
+            "Finding": (
+                "No issues detected by the configured checks. "
+                "This does not confirm that the claim is correct."
+            ),
+            "Severity": "INFO",
+        })
+
+    return findings
+
 # Visual theme
 st.markdown("""
 <style>
