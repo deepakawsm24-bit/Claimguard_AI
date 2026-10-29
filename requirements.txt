@@ -3,4 +3,4 @@ pandas>=2.0
 openpyxl>=3.1
 reportlab>=4.0
 plotly>=5.20
-openai
+openai>=1.0.0
