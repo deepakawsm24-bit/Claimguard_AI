@@ -571,6 +571,29 @@ with tab_exports:
     with e1:
         st.markdown("#### All review results")
         st.caption("Includes normalized document values, risk flags and data-quality status.")
+            # ClaimGuard AI | Consistency Review
+    with st.expander("🧠 Consistency Review — Check individual claims", expanded=False):
+        if filtered.empty:
+            st.info("No claims match the selected filters.")
+        else:
+            selected_index = st.selectbox(
+                "Select a claim to review",
+                options=filtered.index.tolist(),
+                format_func=lambda idx: str(filtered.loc[idx, "Claim ID"]),
+                key="consistency_claim_selector",
+            )
+
+            selected_row = filtered.loc[selected_index]
+            findings = run_claim_consistency_checks(selected_row)
+
+            st.caption(
+                "Rule-based checks only. Findings require verification by authorized staff."
+            )
+            st.dataframe(
+                pd.DataFrame(findings),
+                use_container_width=True,
+                hide_index=True,
+            )
         st.download_button("Download all results (CSV)", df.to_csv(index=False).encode("utf-8-sig"),
                            file_name="claimguard_all_results.csv", mime="text/csv", use_container_width=True)
         issues = df[df["Data Status"] == "REVIEW REQUIRED"]
