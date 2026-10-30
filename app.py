@@ -6,7 +6,6 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-from openai import OpenAI
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
@@ -616,139 +615,96 @@ with tab_exports:
 
 
 with tab_ai:
-    show_section("AI-ASSISTED REVIEW", "ClaimGuard AI Review Assistant")
-    st.markdown(
-        "Generate an explanatory summary of the existing rule-based results. "
-        "AI output is advisory only and must be checked by authorized staff."
-    )
-    st.warning(
-        "Privacy: use synthetic test data only. Before continuing, confirm that you "
-        "understand the limited review information below will be sent to OpenAI."
-    )
-    ai_consent = st.checkbox(
-        "I confirm this is synthetic/demo data and consent to sending the limited review information to OpenAI.",
-        key="claimguard_ai_consent",
+    show_section("FREE RULE-BASED REVIEW", "ClaimGuard Review Assistant")
+    st.info(
+        "Free mode: explanations are generated from ClaimGuard's configured checks. "
+        "No external AI API, API key, or paid credits are used."
     )
 
-    ai_summary_clicked = st.button(
-        "Generate AI portfolio summary",
-        disabled=not ai_consent,
-        key="claimguard_ai_summary_button",
+    st.markdown("### Portfolio summary")
+    st.write(
+        f"ClaimGuard reviewed **{total:,} claims**. "
+        f"**{review_count:,}** rows need data-quality review, "
+        f"**{high_count:,}** have two or more missing required documents, "
+        f"**{medium_count:,}** have one missing required document, and "
+        f"**{clear_count:,}** have no missing-document flags among the configured checks."
     )
-    if ai_summary_clicked:
-        try:
-            api_key = st.secrets.get("OPENAI_API_KEY", "")
-            if not api_key:
-                st.error(
-                    "OPENAI_API_KEY is missing. Add it in Streamlit app settings → Secrets."
-                )
-            else:
-                # Only aggregate metrics are sent for this summary; no claim rows or identifiers.
-                summary_payload = {
-                    "total_claims": int(total),
-                    "needs_data_review": int(review_count),
-                    "high_risk_document_flags": int(high_count),
-                    "medium_risk_document_flags": int(medium_count),
-                    "no_document_flags": int(clear_count),
-                    "risk_calculated": int(calculated_count),
-                    "high_risk_share_percent": round(float(high_pct), 1),
-                    "document_statistics": doc_stats,
-                }
-                client = OpenAI(api_key=api_key)
-                with st.spinner("Generating AI portfolio summary..."):
-                    response = client.responses.create(
-                        model="gpt-5.5",
-                        store=False,
-                        instructions=(
-                            "You are a healthcare claims operations review assistant. "
-                            "Explain only the supplied aggregate metrics. Do not claim fraud, "
-                            "do not approve or reject claims, do not invent causes or facts. "
-                            "Give a concise executive summary, key review priorities, and "
-                            "practical data-quality follow-up steps. State that a human must verify."
-                        ),
-                        input=str(summary_payload),
-                    )
-                st.markdown("### AI portfolio summary")
-                st.markdown(response.output_text)
-        except Exception as error:
-            st.error(
-                "The AI summary could not be generated. Check that the API key is valid, "
-                "API billing/credits are active, and the selected model is available. "
-                f"Technical detail: {error}"
-            )
+
+    priorities = []
+    if review_count:
+        priorities.append(
+            f"First resolve the {review_count:,} row(s) marked REVIEW REQUIRED "
+            "because of blank/duplicate Claim IDs or invalid document values."
+        )
+    if high_count:
+        priorities.append(
+            f"Prioritise manual document checks for {high_count:,} HIGH-level claim(s)."
+        )
+    if medium_count:
+        priorities.append(
+            f"Follow up on the missing required document(s) for {medium_count:,} MEDIUM-level claim(s)."
+        )
+    if not priorities:
+        priorities.append(
+            "No configured data-quality or missing-document flags were found. "
+            "This does not prove that claims are complete or correct."
+        )
+
+    st.markdown("#### Suggested review priorities")
+    for number, item in enumerate(priorities, start=1):
+        st.write(f"{number}. {item}")
+
+    st.caption(
+        "These are transparent rule-based observations, not generative AI, fraud detection, "
+        "medical-necessity assessment, or claim approval/rejection. Human verification is required."
+    )
 
     st.divider()
     st.markdown("### Explain one claim")
     if filtered.empty:
         st.info("No claims match the filters in Claim Explorer.")
     else:
-        ai_claim_index = st.selectbox(
+        free_claim_index = st.selectbox(
             "Choose a claim",
             options=filtered.index.tolist(),
             format_func=lambda idx: str(filtered.loc[idx, "Claim ID"]),
-            key="claimguard_ai_claim_selector",
+            key="claimguard_free_claim_selector",
         )
-        ai_row = filtered.loc[ai_claim_index]
-        ai_findings = run_claim_consistency_checks(ai_row)
-        ai_claim_clicked = st.button(
-            "Generate AI explanation",
-            disabled=not ai_consent,
-            key="claimguard_ai_claim_button",
+        free_row = filtered.loc[free_claim_index]
+        free_findings = run_claim_consistency_checks(free_row)
+
+        st.markdown(f"**Claim reference:** {html.escape(str(free_row.get('Claim ID', '')))}")
+        st.markdown(f"**Data status:** {free_row.get('Data Status', 'Unknown')}")
+        st.markdown(f"**Rule-based risk level:** {free_row.get('Risk Level', 'Unknown')}")
+
+        if free_row.get("Missing Documents", "None") == "None":
+            st.success(
+                "No missing required-document flags were found by the configured checks. "
+                "Verify the source documents before making any decision."
+            )
+        else:
+            st.warning(
+                "Review the following document/data flags: "
+                + str(free_row.get("Missing Documents", "Not available"))
+            )
+
+        st.markdown("#### Check findings")
+        st.dataframe(
+            pd.DataFrame(free_findings),
+            use_container_width=True,
+            hide_index=True,
         )
-        if ai_claim_clicked:
-            try:
-                api_key = st.secrets.get("OPENAI_API_KEY", "")
-                if not api_key:
-                    st.error(
-                        "OPENAI_API_KEY is missing. Add it in Streamlit app settings → Secrets."
-                    )
-                else:
-                    # Do not send the claim ID, patient identifiers, dates, or free-text fields.
-                    limited_claim = {
-                        "rule_based_risk_level": str(ai_row.get("Risk Level", "")),
-                        "data_status": str(ai_row.get("Data Status", "")),
-                        "missing_documents": str(ai_row.get("Missing Documents", "")),
-                        "required_document_flags": {
-                            doc: ("missing" if ai_row.get(doc) is False else
-                                  "received" if ai_row.get(doc) is True else "invalid/unknown")
-                            for doc in REQUIRED_DOCS
-                        },
-                        "consistency_findings": [
-                            {
-                                "check": str(item.get("Check", "")),
-                                "finding": str(item.get("Finding", "")),
-                                "severity": str(item.get("Severity", "")),
-                            }
-                            for item in ai_findings
-                        ],
-                    }
-                    client = OpenAI(api_key=api_key)
-                    with st.spinner("Generating AI claim explanation..."):
-                        response = client.responses.create(
-                            model="gpt-5.5",
-                            store=False,
-                            instructions=(
-                                "You are a healthcare claims operations review assistant. "
-                                "Explain the provided rule-based flags in plain, professional language. "
-                                "Separate observed flags from recommendations. Do not infer fraud, "
-                                "medical necessity, or claim validity. Never approve or reject a claim. "
-                                "Suggest practical documents/checks for a human reviewer and state "
-                                "that the result is advisory, not a final decision."
-                            ),
-                            input=str(limited_claim),
-                        )
-                    st.markdown("### AI claim explanation")
-                    st.markdown(response.output_text)
-            except Exception as error:
-                st.error(
-                    "The AI explanation could not be generated. Check that the API key is valid, "
-                    "API billing/credits are active, and the selected model is available. "
-                    f"Technical detail: {error}"
-                )
-    st.caption(
-        "AI outputs are explanations of supplied review flags, not fraud detection or claim adjudication. "
-        "Final decisions remain with authorized healthcare staff."
-    )
+
+        st.markdown("#### Recommended next steps")
+        if free_row.get("Data Status") == "REVIEW REQUIRED":
+            st.write("- Correct the Claim ID or invalid document values in the source file.")
+        if free_row.get("Risk Level") == "HIGH":
+            st.write("- Obtain and verify each missing required document before further review.")
+        elif free_row.get("Risk Level") == "MEDIUM":
+            st.write("- Follow up for the missing required document and confirm receipt.")
+        elif free_row.get("Risk Level") == "NO DOCUMENT FLAGS":
+            st.write("- Confirm the uploaded Yes/No flags against the original records.")
+        st.write("- Have an authorised reviewer verify the source records and decide next actions.")
 
 with st.expander("Data-quality details"):
     q1, q2, q3 = st.columns(3)
@@ -772,5 +728,6 @@ st.markdown(
     '<div class="small-note">ClaimGuard AI is a portfolio demonstration. Rules flag missing documentation for manual review only; they do not establish fraud or make claim approval/rejection decisions. Final decisions belong to authorized healthcare staff. Use synthetic data only.</div>',
     unsafe_allow_html=True,
 )
+
 
 
